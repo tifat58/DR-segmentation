@@ -9,12 +9,14 @@ import os
 import glob
 import cv2
 import numpy as np
-import config
+import config_gan
 
-image_dir = config.IMAGE_DIR
+image_dir = config_gan.IMAGE_DIR
 for setname in ['TrainingSet', 'TestingSet']:
+#     print(os.path.isdir(os.path.join(image_dir, 'Groundtruths', setname)))
+#     exit()
     mask_dir = os.path.join(image_dir, 'Groundtruths', setname, 'Mask')
-    os.mkdir(mask_dir)
+#     os.mkdir(mask_dir)
 
     imgs_ori = glob.glob(os.path.join(image_dir, 'OriginalImages/'+setname+'/*.jpg'))
 
@@ -23,7 +25,9 @@ for setname in ['TrainingSet', 'TestingSet']:
         image_gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         black_mask = np.uint8((image_gray > 15)*255.)
         ret, thresh = cv2.threshold(black_mask, 127, 255, 0)
-        im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        print(thresh.shape)
+#         im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         mask = np.ones(image.shape[:2], dtype='uint8')*255
         cn = []
         for contour in contours:

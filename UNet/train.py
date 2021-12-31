@@ -29,7 +29,7 @@ from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
 import argparse
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 rotation_angle = config.ROTATION_ANGEL
 image_size = config.IMAGE_SIZE
@@ -196,14 +196,15 @@ if __name__ == '__main__':
 
     train_image_paths, train_mask_paths = get_images(image_dir, args.preprocess, phase='train')
     eval_image_paths, eval_mask_paths = get_images(image_dir, args.preprocess, phase='eval')
-
+#     print(train_mask_paths)
     train_dataset = IDRIDDataset(train_image_paths, train_mask_paths, config.LESION_IDS[args.lesion], transform=
                             Compose([
                             RandomRotation(rotation_angle),
                             RandomCrop(image_size),
                 ]))
     eval_dataset = IDRIDDataset(eval_image_paths, eval_mask_paths, config.LESION_IDS[args.lesion])
-
+#     print(train_dataset.image_paths)
+#     exit()
     train_loader = DataLoader(train_dataset, batchsize, shuffle=True)
     eval_loader = DataLoader(eval_dataset, batchsize, shuffle=False)
 
