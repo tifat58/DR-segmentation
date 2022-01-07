@@ -33,18 +33,25 @@ def get_images(image_dir, preprocess=False, phase='train'):
     elif phase == 'test':
         setname = 'TestingSet' 
     if preprocess:
+#         print("coming..")
         limit = 2
         grid_size = 8
         if not os.path.exists(os.path.join(image_dir, 'Images_CLAHE')):
+#             print("coming..")
             os.mkdir(os.path.join(image_dir, 'Images_CLAHE'))
-        if not os.path.exists(os.path.join(image_dir, 'Images_CLAHE', setname)):
-            os.mkdir(os.path.join(image_dir, 'Images_CLAHE', setname))
             
+        if not os.path.exists(os.path.join(image_dir, 'Images_CLAHE', setname)):
+#             print("coming..")
+            os.mkdir(os.path.join(image_dir, 'Images_CLAHE', setname))
+               
             # compute mean brightess
             meanbright = 0.
             images_number = 0
             for tempsetname in ['TrainingSet', 'TestingSet']:
+                
                 imgs_ori = glob.glob(os.path.join(image_dir, 'OriginalImages/'+tempsetname+'/*.jpg'))
+                
+#                 print(imgs_ori)
                 imgs_ori.sort()
                 images_number += len(imgs_ori)
                 # mean brightness.
@@ -67,8 +74,10 @@ def get_images(image_dir, preprocess=False, phase='train'):
             
         imgs = glob.glob(os.path.join(image_dir, 'Images_CLAHE', setname, '*.jpg'))
     else:
+#         print("coming to else..")
         imgs = glob.glob(os.path.join(image_dir, 'OriginalImages', setname, '*.jpg'))
-
+        
+#     print("coming..")
     imgs.sort()     
     mask_paths = []
     train_number = int(len(imgs) * train_ratio)

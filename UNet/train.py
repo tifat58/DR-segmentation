@@ -11,7 +11,7 @@ import os
 import numpy as np
 import random
 import copy
-from sklearn.metrics import precision_recall_curve, average_precision_score
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_auc_score
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -72,7 +72,9 @@ def eval_model(model, eval_loader):
     masks_hard = np.reshape(masks_hard, (masks_hard.shape[0], -1))
 
     ap = average_precision_score(masks_hard[0], masks_soft[0])
-    return ap
+    auc = roc_auc_score(masks_hard[0], masks_soft[0])
+    print(auc)
+    return ap, auc
 
 def denormalize(inputs):
     return (inputs * 255.).to(device=device, dtype=torch.uint8)
@@ -139,10 +141,11 @@ def train_model(model, lesion, preprocess, train_loader, eval_loader, criterion,
             os.mkdir(dir_checkpoint)
 
         if (epoch + 1) % 40 == 0:
-            eval_ap = eval_model(model, eval_loader)
+            eval_ap, eval_auc = eval_model(model, eval_loader)
             with open("ap_during_learning_" + lesion + preprocess + ".txt", 'a') as f:
                 f.write("epoch: " + str(epoch))
-                f.write("ap: " + str(eval_ap))
+                f.write(" ap: " + str(eval_ap))
+                f.write(" auc: " + str(eval_auc))
                 f.write("\n")
 
             if eval_ap > best_ap:

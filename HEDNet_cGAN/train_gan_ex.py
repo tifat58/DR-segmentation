@@ -12,7 +12,7 @@ from optparse import OptionParser
 import numpy as np
 import random
 import copy
-from sklearn.metrics import precision_recall_curve, average_precision_score
+from sklearn.metrics import precision_recall_curve, average_precision_score, roc_auc_score
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -29,7 +29,7 @@ from dataset import IDRIDDataset
 from torchvision import datasets, models, transforms
 from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
-from logger import Logger
+# from logger import Logger
 import argparse
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -79,6 +79,8 @@ def eval_model(model, eval_loader):
     masks_hard = np.reshape(masks_hard, (masks_hard.shape[0], -1))
 
     ap = average_precision_score(masks_hard[0], masks_soft[0])
+    auc = roc_auc_score(masks_hard[0], masks_soft[0])
+    print("AUC: ", auc)
     return ap
 
 def denormalize(inputs):
@@ -266,7 +268,8 @@ if __name__ == '__main__':
 
     train_image_paths, train_mask_paths = get_images(image_dir, config.PREPROCESS, phase='train')
     eval_image_paths, eval_mask_paths = get_images(image_dir, config.PREPROCESS, phase='eval')
-
+    print(train_mask_paths)
+#     exit()
     train_dataset = IDRIDDataset(train_image_paths, train_mask_paths, config.CLASS_ID, transform=
                             Compose([
                             RandomRotation(rotation_angle),

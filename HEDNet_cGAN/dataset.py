@@ -25,7 +25,8 @@ class IDRIDDataset(Dataset):
         self.mask_paths = []
         self.masks = []
         self.images = []
-        if self.mask_paths is not None:
+        print(image_paths)
+        if mask_paths is not None:
             for image_path, mask_path4 in zip(image_paths, mask_paths):
                 mask_path = mask_path4[class_id]
                 if mask_path is None:
