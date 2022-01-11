@@ -1,0 +1,6 @@
+HEDNet/results/
+UNet/results/
+HEDNet_cGAN/results/
+#HEDNet_cGAN/
+HEDNet_cGAN/pre-trained/
+HEDNet_cGAN/data/
