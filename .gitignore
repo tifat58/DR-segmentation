@@ -1,3 +1,5 @@
+__pycache__/
+#*/__pycache__/*
 HEDNet/results/
 UNet/results/
 HEDNet_cGAN/results/

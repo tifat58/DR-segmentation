@@ -16,17 +16,17 @@ PREPROCESS = True
 IMAGE_SIZE = 512
 
 #Modify the parameters for training.
-EPOCHES = 5000
+EPOCHES = 3000
 TRAIN_BATCH_SIZE = 4
 D_WEIGHT = 0.01
 D_MULTIPLY = False
 PATCH_SIZE = 128
-MODELS_DIR = 'results/models_he'
-LOG_DIR = 'drlog_hednet_true_he_gan'
+MODELS_DIR = 'results/models_he_tatl'
+LOG_DIR = 'drlog_hednet_true_he_gan_tatl'
 G_LEARNING_RATE = 0.001
 D_LEARNING_RATE = 0.001
 LESION_DICE_WEIGHT = 0.
 ROTATION_ANGEL = 20
 CROSSENTROPY_WEIGHTS = [0.1, 1.]
 RESUME_MODEL = 'results/models_sg/model_True.pth.tar' #None
-TATL = False
+TATL = True

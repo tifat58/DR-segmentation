@@ -5,7 +5,7 @@
 # @Email     : xiaoqiqi177@gmail.com & zoujx96@gmail.com
 # @File    : config_gan_ex.py
 # **************************************
-LESION_IDS = {'EX':0, 'HE':1, 'MA':2, 'SE':3}
+LESION_IDS = {'EX':0, 'HE':1, 'MA':2, 'SE':3, 'SG':4}
 
 #Modify the general parameters.
 IMAGE_DIR = 'data'

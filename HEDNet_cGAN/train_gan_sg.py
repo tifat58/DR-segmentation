@@ -3,11 +3,12 @@
 # **************************************
 # @Author  : Qiqi Xiao & Jiaxu Zou
 # @Email     : xiaoqiqi177@gmail.com & zoujx96@gmail.com
-# @File    : train.py
+# @File    : train_gan_sg.py
 # **************************************
 import sys
 from torch.autograd import Variable
 import os
+from optparse import OptionParser
 import numpy as np
 import random
 import copy
@@ -20,21 +21,27 @@ import torch.nn.functional as F
 from torch import optim
 from torch.optim import lr_scheduler
 
-import config
-from unet import UNet
+import config_gan_sg as config
+from hednet import HNNNet
+from dnet import DNet
 from utils import get_images
 from dataset import IDRIDDataset
 from torchvision import datasets, models, transforms
 from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
+# from logger import Logger
 import argparse
 
-device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
+dir_checkpoint = config.MODELS_DIR
+lesions = [config.LESION_NAME]
 rotation_angle = config.ROTATION_ANGEL
 image_size = config.IMAGE_SIZE
 image_dir = config.IMAGE_DIR
 batchsize = config.TRAIN_BATCH_SIZE
+
+softmax = nn.Softmax(1)
 
 def eval_model(model, eval_loader):
     model.eval()
@@ -56,10 +63,10 @@ def eval_model(model, eval_loader):
                     h_max = min(h, (i + 1) * image_size)
                     w_max = min(w, (j + 1) * image_size)
                     inputs_part = inputs[:,:, i*image_size:h_max, j*image_size:w_max]
-                    masks_pred_single = model(inputs_part)
+                    masks_pred_single = model(inputs_part)[-1]
                     masks_pred[:, :, i*image_size:h_max, j*image_size:w_max] = masks_pred_single
 
-            masks_pred_softmax_batch = F.softmax(masks_pred, dim=1).cpu().numpy()
+            masks_pred_softmax_batch = softmax(masks_pred).cpu().numpy()
             masks_soft_batch = masks_pred_softmax_batch[:, 1:, :, :]
             masks_hard_batch = true_masks[:,1:].cpu().numpy()
 
@@ -73,11 +80,13 @@ def eval_model(model, eval_loader):
 
     ap = average_precision_score(masks_hard[0], masks_soft[0])
     auc = roc_auc_score(masks_hard[0], masks_soft[0])
-    print(auc)
+    print("AUC: ", auc)
     return ap, auc
 
 def denormalize(inputs):
-    return (inputs * 255.).to(device=device, dtype=torch.uint8)
+    mean = torch.FloatTensor([0.485, 0.456, 0.406]).to(device)
+    std = torch.FloatTensor([0.229, 0.224, 0.225]).to(device)
+    return ((inputs * std[None, :, None, None] + mean[None, :, None, None])*255.).to(device=device, dtype=torch.uint8)
 
 def generate_log_images(inputs_t, true_masks_t, masks_pred_softmax_t):
     true_masks = (true_masks_t * 255.).to(device=device, dtype=torch.uint8)
@@ -103,34 +112,65 @@ def image_to_patch(image, patch_size):
             .reshape((-1, channel, patch_size, patch_size)))
 
 
-def train_model(model, lesion, preprocess, train_loader, eval_loader, criterion, g_optimizer, g_scheduler, 
-    batch_size, num_epochs=5, start_epoch=0, start_step=0):
+def train_model(model, dnet, gan_exist, train_loader, eval_loader, criterion, g_optimizer, g_scheduler, d_optimizer, \
+    d_scheduler, batch_size, num_epochs=5, start_epoch=0, start_step=0):
     model.to(device=device)
+    dnet.to(device=device)
     tot_step_count = start_step
 
     best_ap = 0.
-    dir_checkpoint = 'results/models_' + lesion.lower()
 
     for epoch in range(start_epoch, start_epoch + num_epochs):
         print('Starting epoch {}/{}.\t\n'.format(epoch + 1, start_epoch+num_epochs))
         g_scheduler.step()
+        d_scheduler.step()
         model.train()
+        dnet.train()
 
         for inputs, true_masks in train_loader:
             inputs = inputs.to(device=device, dtype=torch.float)
             true_masks = true_masks.to(device=device, dtype=torch.float)
-            masks_pred = model(inputs)
+
+            masks_pred = model(inputs)[-1]
             masks_pred_transpose = masks_pred.permute(0, 2, 3, 1)
             masks_pred_flat = masks_pred_transpose.reshape(-1, masks_pred_transpose.shape[-1])
             true_masks_indices = torch.argmax(true_masks, 1)
             true_masks_flat = true_masks_indices.reshape(-1)
             loss_ce = criterion(masks_pred_flat, true_masks_flat.long())
+            masks_pred_softmax = softmax(masks_pred)
             
             # Save images
-
             ce_weight = 1.
             g_loss = loss_ce * ce_weight
 
+            # add descriminator loss
+            if config.D_MULTIPLY:
+                input_real = torch.matmul(inputs, true_masks[:, 1:, :, :])
+                input_real = image_to_patch(input_real, config.PATCH_SIZE)
+                input_fake = torch.matmul(inputs, masks_pred_softmax[:, 1:, :, :])
+                input_fake = image_to_patch(input_fake, config.PATCH_SIZE)
+            else:
+                input_real = torch.cat((inputs, true_masks[:, 1:, :, :]), 1)
+                input_real = image_to_patch(input_real, config.PATCH_SIZE)
+                input_fake = torch.cat((inputs, masks_pred_softmax[:, 1:, :, :]), 1)
+                input_fake = image_to_patch(input_fake, config.PATCH_SIZE)
+            
+            d_real = dnet(input_real)
+            d_fake = dnet(input_fake.detach()) #do not backward to generator
+            d_real_loss = torch.mean(1 - d_real)
+            d_fake_loss = torch.mean(d_fake)
+            
+            #update d loss
+            loss_d = d_real_loss + d_fake_loss
+            d_optimizer.zero_grad()
+            loss_d.backward()
+            d_optimizer.step()
+            
+            #updage g loss
+            d_fake = dnet(input_fake) #do backward to generator
+            loss_gan = torch.mean(1 - d_fake)
+            g_loss += loss_gan * gan_weight
+            
             g_optimizer.zero_grad()
             g_loss.backward()
             g_optimizer.step()
@@ -142,7 +182,7 @@ def train_model(model, lesion, preprocess, train_loader, eval_loader, criterion,
 
         if (epoch + 1) % 40 == 0:
             eval_ap, eval_auc = eval_model(model, eval_loader)
-            with open("ap_during_learning_" + lesion + preprocess + ".txt", 'a') as f:
+            with open("ap_during_learning_sg_" + gan_exist + ".txt", 'a') as f:
                 f.write("epoch: " + str(epoch))
                 f.write(" ap: " + str(eval_ap))
                 f.write(" auc: " + str(eval_auc))
@@ -150,46 +190,76 @@ def train_model(model, lesion, preprocess, train_loader, eval_loader, criterion,
 
             if eval_ap > best_ap:
                 best_ap = eval_ap
-
-                state = {
-                    'epoch': epoch,
-                    'step': tot_step_count,
-                    'state_dict': model.state_dict(),
-                    'optimizer': g_optimizer.state_dict()
-                    }
+                if dnet:
+                    state = {
+                        'epoch': epoch,
+                        'step': tot_step_count,
+                        'g_state_dict': model.state_dict(),
+                        'd_state_dict': dnet.state_dict(),
+                        'g_optimizer': g_optimizer.state_dict(),
+                        'd_optimizer': d_optimizer.state_dict(),
+                        }
+                else:
+                    state = {
+                        'epoch': epoch,
+                        'step': tot_step_count,
+                        'state_dict': model.state_dict(),
+                        'optimizer': optimizer.state_dict()
+                        }
 
                 torch.save(state, \
-                            os.path.join(dir_checkpoint, 'model_' + preprocess + '.pth.tar'))
+                            os.path.join(dir_checkpoint, 'model_' + gan_exist + '.pth.tar'))
         
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=1234)
-    parser.add_argument('--preprocess', type=str, default='7')
-    parser.add_argument('--lesion', type=str, default='EX')
+    parser.add_argument('--gan', type=str, default="True")
     args = parser.parse_args()
     #Set random seed for Pytorch and Numpy for reproducibility
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    args.seed = 567
+    np.random.seed(567)
+    random.seed(567)
+    torch.manual_seed(567)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed(args.seed)
+        torch.cuda.manual_seed(567)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    
-    model = UNet(n_channels=3, n_classes=2)
+
+    if args.gan == "True":
+        gan_weight = config.D_WEIGHT
+    else:
+        gan_weight = 0.
+
+    model = HNNNet(pretrained=True, class_number=2)
+   
+    if config.D_MULTIPLY:
+        dnet = DNet(input_dim=3, output_dim=1, input_size=config.PATCH_SIZE)
+    else:
+        dnet = DNet(input_dim=4, output_dim=1, input_size=config.PATCH_SIZE)
+
     g_optimizer = optim.SGD(model.parameters(),
                               lr=config.G_LEARNING_RATE,
                               momentum=0.9,
                               weight_decay=0.0005)
-    resume = False
+    d_optimizer = optim.SGD(dnet.parameters(),
+                              lr=config.D_LEARNING_RATE,
+                              momentum=0.9,
+                              weight_decay=0.0005)
+    resume = config.RESUME_MODEL
     if resume:
         if os.path.isfile(resume):
             print("=> loading checkpoint '{}'".format(resume))
             checkpoint = torch.load(resume)
             start_epoch = checkpoint['epoch']+1
             start_step = checkpoint['step']
-            model.load_state_dict(checkpoint['state_dict'])
-            g_optimizer.load_state_dict(checkpoint['optimizer'])
+            try:
+                model.load_state_dict(checkpoint['state_dict'])
+                g_optimizer.load_state_dict(checkpoint['optimizer'])
+            except:
+                model.load_state_dict(checkpoint['g_state_dict'])
+                dnet.load_state_dict(checkpoint['d_state_dict'])
+                #g_optimizer.load_state_dict(checkpoint['g_optimizer'])
+                #d_optimizer.load_state_dict(checkpoint['d_optimizer'])
             print('Model loaded from {}'.format(resume))
         else:
             print("=> no checkpoint found at '{}'".format(resume))
@@ -197,23 +267,27 @@ if __name__ == '__main__':
         start_epoch = 0
         start_step = 0
 
-    train_image_paths, train_mask_paths = get_images(image_dir, args.preprocess, phase='train')
-    eval_image_paths, eval_mask_paths = get_images(image_dir, args.preprocess, phase='eval')
-    
-    train_dataset = IDRIDDataset(train_image_paths, train_mask_paths, config.LESION_IDS[args.lesion], transform=
+    train_image_paths, train_mask_paths = get_images(image_dir, config.PREPROCESS, phase='train')
+    eval_image_paths, eval_mask_paths = get_images(image_dir, config.PREPROCESS, phase='eval')
+    print(train_mask_paths)
+#     exit()
+    train_dataset = IDRIDDataset(train_image_paths, train_mask_paths, config.CLASS_ID, transform=
                             Compose([
                             RandomRotation(rotation_angle),
                             RandomCrop(image_size),
+                            #ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+                            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                 ]))
-    eval_dataset = IDRIDDataset(eval_image_paths, eval_mask_paths, config.LESION_IDS[args.lesion])
-#     print(train_dataset.image_paths)
-#     exit()
+    eval_dataset = IDRIDDataset(eval_image_paths, eval_mask_paths, config.CLASS_ID, transform=Compose([
+                            Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ]))
+
     train_loader = DataLoader(train_dataset, batchsize, shuffle=True)
     eval_loader = DataLoader(eval_dataset, batchsize, shuffle=False)
 
-    
     g_scheduler = lr_scheduler.StepLR(g_optimizer, step_size=200, gamma=0.9)
+    d_scheduler = lr_scheduler.StepLR(d_optimizer, step_size=100, gamma=0.9)
     criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor(config.CROSSENTROPY_WEIGHTS).to(device))
     
-    train_model(model, args.lesion, args.preprocess, train_loader, eval_loader, criterion, g_optimizer, g_scheduler, \
-        batchsize, num_epochs=config.EPOCHES, start_epoch=start_epoch, start_step=start_step)
+    train_model(model, dnet, args.gan, train_loader, eval_loader, criterion, g_optimizer, g_scheduler, \
+        d_optimizer, d_scheduler, batchsize, num_epochs=config.EPOCHES, start_epoch=start_epoch, start_step=start_step)

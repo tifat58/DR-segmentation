@@ -79,8 +79,8 @@ def get_images(image_dir, preprocess='0', phase='train'):
     else:
         image_paths = imgs
     mask_path = os.path.join(image_dir, 'Groundtruths', setname)
-    lesions = ['HardExudates', 'Haemorrhages', 'Microaneurysms', 'SoftExudates', 'Mask']
-    lesion_abbvs = ['EX', 'HE', 'MA', 'SE', 'MASK']
+    lesions = ['HardExudates', 'Haemorrhages', 'Microaneurysms', 'SoftExudates', 'Full_Segmentation', 'Mask']
+    lesion_abbvs = ['EX', 'HE', 'MA', 'SE', 'SG', 'MASK']
     for image_path in image_paths:
         paths = []
         name = os.path.split(image_path)[1].split('.')[0]

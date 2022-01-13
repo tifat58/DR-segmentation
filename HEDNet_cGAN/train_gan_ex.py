@@ -21,7 +21,7 @@ import torch.nn.functional as F
 from torch import optim
 from torch.optim import lr_scheduler
 
-import config_gan_ex as config
+import config_gan_ex_tatl as config
 from hednet import HNNNet
 from dnet import DNet
 from utils import get_images
@@ -31,8 +31,8 @@ from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
 # from logger import Logger
 import argparse
-
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dir_checkpoint = config.MODELS_DIR
 lesions = [config.LESION_NAME]
@@ -40,7 +40,7 @@ rotation_angle = config.ROTATION_ANGEL
 image_size = config.IMAGE_SIZE
 image_dir = config.IMAGE_DIR
 batchsize = config.TRAIN_BATCH_SIZE
-
+TATL_CHK='True'
 softmax = nn.Softmax(1)
 
 def eval_model(model, eval_loader):
@@ -81,7 +81,7 @@ def eval_model(model, eval_loader):
     ap = average_precision_score(masks_hard[0], masks_soft[0])
     auc = roc_auc_score(masks_hard[0], masks_soft[0])
     print("AUC: ", auc)
-    return ap
+    return ap, auc
 
 def denormalize(inputs):
     mean = torch.FloatTensor([0.485, 0.456, 0.406]).to(device)
@@ -171,6 +171,8 @@ def train_model(model, dnet, gan_exist, train_loader, eval_loader, criterion, g_
             loss_gan = torch.mean(1 - d_fake)
             g_loss += loss_gan * gan_weight
             
+            print('loss: d_real: {} d_fake: {} gan_loss: {}'.format(d_real_loss, d_fake_loss, loss_gan))
+            
             g_optimizer.zero_grad()
             g_loss.backward()
             g_optimizer.step()
@@ -181,10 +183,11 @@ def train_model(model, dnet, gan_exist, train_loader, eval_loader, criterion, g_
             os.mkdir(dir_checkpoint)
 
         if (epoch + 1) % 40 == 0:
-            eval_ap = eval_model(model, eval_loader)
-            with open("ap_during_learning_ex_" + gan_exist + ".txt", 'a') as f:
+            eval_ap, eval_auc = eval_model(model, eval_loader)
+            with open("ap_during_learning_ex_" + gan_exist + "_TATL_" + TATL_CHK + ".txt", 'a') as f:
                 f.write("epoch: " + str(epoch))
-                f.write("ap: " + str(eval_ap))
+                f.write(" ap: " + str(eval_ap))
+                f.write(" auc: " + str(eval_auc))
                 f.write("\n")
 
             if eval_ap > best_ap:
