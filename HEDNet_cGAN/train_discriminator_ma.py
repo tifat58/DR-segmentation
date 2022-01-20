@@ -30,7 +30,7 @@ from torchvision import datasets, models, transforms
 from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
 import argparse
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 dir_checkpoint = config.MODELS_DIR
@@ -131,11 +131,7 @@ def train_model(model, dnet, gan_exist, train_loader, eval_loader, criterion, g_
             inputs = inputs.to(device=device, dtype=torch.float)
             true_masks = true_masks.to(device=device, dtype=torch.float)
             masks_pred = model(inputs)[-1]
-            #masks_pred = model(inputs)
-            #for i in range(len(masks_pred)):
-               
-             #   print(masks_pred[i].shape)
-            #exit()
+
             masks_pred_transpose = masks_pred.permute(0, 2, 3, 1)
             masks_pred_flat = masks_pred_transpose.reshape(-1, masks_pred_transpose.shape[-1])
             true_masks_indices = torch.argmax(true_masks, 1)

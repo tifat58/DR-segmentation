@@ -264,6 +264,7 @@ class HNNNet(nn.Module):
         
         # get output from VGG model
         conv1, conv2, conv3, conv4, conv5 = self.VGG16fs.forward_hypercol(x)
+        #return conv1, conv2, conv3, conv4, conv5
 
         ## side output
         dsn5_up = self.upscore5(self.dsn5(conv5))
