@@ -29,6 +29,9 @@ from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
 import argparse
 
+import segmentation_models_pytorch as smp
+
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 rotation_angle = config.ROTATION_ANGEL
@@ -225,6 +228,7 @@ if __name__ == '__main__':
 
     train_loader = DataLoader(train_dataset, batchsize, shuffle=True)
     eval_loader = DataLoader(eval_dataset, batchsize, shuffle=False)
+
 
     g_scheduler = lr_scheduler.StepLR(g_optimizer, step_size=200, gamma=0.9)
     criterion = nn.CrossEntropyLoss(weight=torch.FloatTensor(config.CROSSENTROPY_WEIGHTS).to(device))

@@ -29,6 +29,7 @@ from torchvision import datasets, models, transforms
 from transform.transforms_group import *
 from torch.utils.data import DataLoader, Dataset
 import argparse
+import segmentation_models_pytorch as smp
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -88,8 +89,16 @@ if __name__ == '__main__':
         torch.cuda.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-
-    model = UNet(n_channels=3, n_classes=2)
+    
+    print("Model here")
+    model = smp.Unet(
+        encoder_name="resnet50",  # choose encoder, e.g. mobilenet_v2 or efficientnet-b7
+        encoder_weights="imagenet",  # use `imagenet` pre-trained weights for encoder initialization
+        in_channels=3,  # model input channels (1 for gray-scale images, 3 for RGB, etc.)
+        classes=2,  # model output channels (number of classes in your dataset)
+    )
+    
+#     model = UNet(n_channels=3, n_classes=2)
 
     resume = args.model
 
